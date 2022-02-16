@@ -40,11 +40,16 @@ def main(rank, manager):
     elif manager.mode == "test":
         model.test(manager, loaders, load=True, log=True)
 
+    elif manager.mode == "inspect":
+        manager.load(model)
+        model.inspect(manager, loaders)
+
 
 
 if __name__ == "__main__":
     config = {
         "validate_step": "0.5e",
+        "enable_gate": "weight"
     }
     manager = Manager(config)
 

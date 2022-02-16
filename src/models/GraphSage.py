@@ -39,6 +39,9 @@ class GraphSage(BaseModel):
         # D = self.config.hidden_size
         token_id = token_id.view(-1, L)
         attn_mask = attn_mask.view(B * N, L)
+        if self.enable_gate in ["first", "bm25", "keybert", "random"]:
+            token_id = token_id[:, : self.k]
+            attn_mask = attn_mask[:, : self.k]
         embeddings = self.plm(token_id, attention_mask=attn_mask).last_hidden_state[:, 0].view(B, N, self.plm_dim)
         node_embeddings = self.graphsage(embeddings, neighbor_mask)
         return node_embeddings

@@ -5,60 +5,61 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser()
 parser.add_argument("-dr", "--data-root", dest="data_root", default="../../../Data")
 parser.add_argument("-eg", "--enable-gate", dest="enable_gate", help="way to gate tokens", type=str, choices=["weight", "none", "bm25", "first", "keybert", "random"], default="weight")
+parser.add_argument("-nn", "--neighbor-num", dest="neighbor_num", help="number of neighbors", type=int, default=5)
+
 args = parser.parse_args()
 
-news_dir_all = ["MINDlarge_train", "MINDlarge_dev", "MINDlarge_test"]
+text_dir_all = ["train", "dev", "test"]
 
 if args.enable_gate == "bm25":
     from utils.util import BM25
-    for news_dir in news_dir_all:
-        news_path = os.path.join(args.data_root, "MIND", news_dir, "news.tsv")
-        if not os.path.exists(news_path):
+    for text_dir in text_dir_all:
+        text_path = os.path.join(args.data_root, "MIND", text_dir, "news.tsv")
+        if not os.path.exists(text_path):
             continue
 
-        bm25_title = BM25()
-        bm25_abs = BM25()
-
-        titles = []
-        abstracts = []
-        with open(news_path) as f:
+        bm25 = BM25()
+        texts = []
+        with open(text_path) as f:
             for line in f:
-                id, category, subcategory, title, abs, _, _, _ = line.strip("\n").split("\t")
-                titles.append(title)
-                abstracts.append(abs)
+                query_and_neighbors, key_and_neighbors = line.strip('\n').split('\t')[:2]
+                query_and_neighbors = query_and_neighbors.split('|\'|')
+                key_and_neighbors = key_and_neighbors.split('|\'|')
+                texts.extend(query_and_neighbors + key_and_neighbors)
 
-        titles = bm25_title(titles)
-        abstracts = bm25_abs(abstracts)
+            bm25.fit(texts)
 
-        new_news_path = os.path.join(os.path.split(news_path)[0], "bm25.tsv")
-        with open(new_news_path, "w") as f:
-            for title, abs in zip(titles, abstracts):
-                f.write(title + "\t" + abs + "\n")
+            new_text_path = os.path.join(os.path.split(text_path)[0], "bm25.tsv")
+            g = open(new_text_path, "w")
+            for line in f:
+                query_and_neighbors, key_and_neighbors = line.strip('\n').split('\t')[:2]
+                query_and_neighbors = query_and_neighbors.split('|\'|')
+                key_and_neighbors = key_and_neighbors.split('|\'|')
+
+                query_and_neighbors = [bm25(x) for x in query_and_neighbors]
+                key_and_neighbors = [bm25(x) for x in key_and_neighbors]
+                g.write("|\'|".join(query_and_neighbors) + "\t" + "|\'|".join(key_and_neighbors))
 
 
 elif args.enable_gate == "keybert":
     from keybert import KeyBERT
     kw_model = KeyBERT()
 
-    for news_dir in news_dir_all:
-        news_path = os.path.join(args.data_root, "MIND", news_dir, "news.tsv")
-        if not os.path.exists(news_path):
+    for text_dir in text_dir_all:
+        text_path = os.path.join(args.data_root, "MIND", text_dir, "news.tsv")
+        if not os.path.exists(text_path):
             continue
 
-        titles = []
-        abstracts = []
-        with open(news_path) as f:
-            new_news_path = os.path.join(os.path.split(news_path)[0], "keybert.tsv")
-            g = open(new_news_path, "w")
-            for line in tqdm(f, desc=news_path):
-                id, category, subcategory, title, abs, _, _, _ = line.strip("\n").split("\t")
+        texts = []
+        with open(text_path) as f:
+            new_text_path = os.path.join(os.path.split(text_path)[0], "bm25.tsv")
+            g = open(new_text_path, "w")
+            for line in f:
+                query_and_neighbors, key_and_neighbors = line.strip('\n').split('\t')[:2]
+                query_and_neighbors = query_and_neighbors.split('|\'|')
+                key_and_neighbors = key_and_neighbors.split('|\'|')
 
-                title = kw_model.extract_keywords(title, keyphrase_ngram_range=(1, 1), stop_words='english', top_n=100)
-                title = " ".join([kwd[0] for kwd in title])
-
-                abs = kw_model.extract_keywords(abs, keyphrase_ngram_range=(1, 1), stop_words='english', top_n=100)
-                abs = " ".join([kwd[0] for kwd in abs])
-
-                g.write(title + "\t" + abs + "\n")
-            g.close()
+                query_and_neighbors = [kw_model.extract_keywords(x, keyphrase_ngram_range=(1, 1), stop_words='english', top_n=10) for x in query_and_neighbors]
+                key_and_neighbors = [kw_model.extract_keywords(x, keyphrase_ngram_range=(1, 1), stop_words='english', top_n=10) for x in key_and_neighbors]
+                g.write("|\'|".join(query_and_neighbors) + "\t" + "|\'|".join(key_and_neighbors))
 

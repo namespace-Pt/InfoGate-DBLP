@@ -62,7 +62,7 @@ class Manager():
 
         parser.add_argument("-sl", "--sequence-length", dest="sequence_length", type=int, default=32)
 
-        parser.add_argument("-eg", "--enable-gate", dest="enable_gate", help="way to gate tokens", type=str, choices=["weight", "none", "bm25", "first", "keybert", "random"], default="weight")
+        parser.add_argument("-eg", "--enable-gate", dest="enable_gate", help="way to gate tokens", type=str, choices=["weight", "none", "bm25", "first", "keybert", "random"], default="none")
         parser.add_argument("-wt", "--weighter", dest="weighter", default="cnn")
 
         parser.add_argument("-ged", "--gate-embedding-dim", dest="gate_embedding_dim", type=int, default=300)
@@ -152,7 +152,8 @@ class Manager():
         dataloader_map = {
             "train": ["train", "dev"],
             "dev": ["dev"],
-            "test": ["test"]
+            "test": ["test"],
+            "inspect": ["dev"]
         }
 
         self.plm_dir = os.path.join(self.data_root, "PLM", self.plm)
@@ -349,10 +350,9 @@ class Manager():
         if self.rank == 0:
             logger.info("training {}...".format(model.module.name if isinstance(model, torch.nn.parallel.DistributedDataParallel) else model.name))
 
+        loader_train = loaders["train"]
         for epoch in range(self.epochs):
             epoch_loss = 0
-
-            loader_train = loaders["train"]
             # dataset_train = DBLP_Train(self)
             # if self.distributed:
             #     global_end = mp.Manager().Value('b', False)

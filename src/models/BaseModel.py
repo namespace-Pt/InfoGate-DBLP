@@ -23,6 +23,8 @@ class BaseModel(nn.Module):
         self.world_size = manager.world_size
 
         self.enable_gate = manager.enable_gate
+        self.k = manager.k
+        
         self.neighbor_num = manager.neighbor_num
 
         if name is None:
@@ -34,19 +36,6 @@ class BaseModel(nn.Module):
 
         self.crossEntropy = nn.CrossEntropyLoss()
         self.logger = logging.getLogger(self.name)
-
-
-    def get_optimizer(self, manager, dataloader_length):
-        optimizer = optim.Adam(self.parameters(), lr=manager.learning_rate)
-
-        scheduler = None
-        if manager.scheduler == "linear":
-            total_steps = dataloader_length * manager.epochs
-            scheduler = get_linear_schedule_with_warmup(optimizer,
-                                            num_warmup_steps = round(manager.warmup * total_steps),
-                                            num_training_steps = total_steps)
-
-        return optimizer, scheduler
 
 
     def _gather_tensors(self, local_tensor):
@@ -63,6 +52,50 @@ class BaseModel(nn.Module):
         dist.all_gather(all_tensors, local_tensor)
         all_tensors[self.rank] = local_tensor
         return torch.cat(all_tensors, dim=0)
+
+
+    def _compute_gate(self, token_id, attn_mask, gate_mask, token_weight):
+        """ gating by the weight of each token
+
+        Returns:
+            gated_token_ids: [B, K]
+            gated_attn_masks: [B, K]
+            gated_token_weight: [B, K]
+        """
+        if gate_mask is not None:
+            keep_k_modifier = self.keep_k_modifier * (gate_mask.sum(dim=-1, keepdim=True) < self.k)
+            pad_pos = ~((gate_mask + keep_k_modifier).bool())   # B, L
+            token_weight = token_weight.masked_fill(pad_pos, -float('inf'))
+
+            gated_token_weight, gated_token_idx = token_weight.topk(self.k)
+            gated_token_weight = torch.softmax(gated_token_weight, dim=-1)
+            gated_token_id = token_id.gather(dim=-1, index=gated_token_idx)
+            gated_attn_mask = attn_mask.gather(dim=-1, index=gated_token_idx)
+            # gated_gate_mask = gate_mask.gather(dim=-1, index=gated_token_idx)
+
+        # heuristic gate
+        else:
+            if token_id.dim() == 2:
+                gated_token_id = token_id[:, 1: self.k + 1]
+                gated_attn_mask = attn_mask[:, 1: self.k + 1]
+            else:
+                gated_token_id = token_id[:, :, 1: self.k + 1]
+                gated_attn_mask = attn_mask[:, :, 1: self.k + 1]
+            gated_token_weight = None
+        return gated_token_id, gated_attn_mask, gated_token_weight
+
+
+    def get_optimizer(self, manager, dataloader_length):
+        optimizer = optim.Adam(self.parameters(), lr=manager.learning_rate)
+
+        scheduler = None
+        if manager.scheduler == "linear":
+            total_steps = dataloader_length * manager.epochs
+            scheduler = get_linear_schedule_with_warmup(optimizer,
+                                            num_warmup_steps = round(manager.warmup * total_steps),
+                                            num_training_steps = total_steps)
+
+        return optimizer, scheduler
 
 
     def _eval(self, manager, loader):
@@ -134,22 +167,22 @@ class BaseModel(nn.Module):
 
     @torch.no_grad()
     def inspect(self, manager, loaders):
-        assert hasattr(self, "weighter")
+        assert manager.enable_gate != "none"
 
         tokenizer = AutoTokenizer.from_pretrained(manager.plm_dir)
-        loader_news = loaders["news"]
-        for i, x in enumerate(loader_news):
-            token_ids = x["cdd_token_id"].to(self.device)
-            attn_mask = x['cdd_attn_mask'].to(self.device)
-            gate_mask = x['cdd_gate_mask'].to(self.device)
-            token_weight = self.weighter(token_ids, attn_mask)
-            gated_token_ids, gated_attn_masks, gated_token_weights = self._compute_gate(token_ids, attn_mask, gate_mask, token_weight)
-            for token_id, gated_token_id, gated_token_weight in zip(token_ids.tolist(), gated_token_ids.tolist(), gated_token_weights.tolist()):
-                token = tokenizer.convert_ids_to_tokens(token_id)
-                gated_token = tokenizer.convert_ids_to_tokens(gated_token_id)
-                print("-"*10 + "news text" + "-"*10)
-                print(tokenizer.decode(token_id))
-                print("-"*10 + "gated tokens" + "-"*10)
-                line = "; ".join([f"{i} ({round(p, 3)})" for i, p in zip(gated_token, gated_token_weight)])
-                print(line)
-                input()
+        loader_dev = loaders["dev"]
+        for i, x in enumerate(loader_dev):
+            token_ids = x["query_token_id"].to(self.device)
+            attn_masks = x['query_attn_mask'].to(self.device)
+            gate_masks = x['query_gate_mask'].to(self.device)
+            for token_id, attn_mask, gate_mask in zip(token_ids, attn_masks, gate_masks):
+                token_weight = self.weighter(token_id, attn_mask)
+                gated_token_ids, gated_attn_masks, gated_token_weights = self._compute_gate(token_id, attn_mask, gate_mask, token_weight)
+                for tid, gated_token_id, gated_token_weight in zip(token_id.tolist(), gated_token_ids.tolist(), gated_token_weights.tolist()):
+                    gated_token = tokenizer.convert_ids_to_tokens(gated_token_id)
+                    print("-"*10 + "original text" + "-"*10)
+                    print(tokenizer.decode(tid))
+                    print("-"*10 + "gated tokens" + "-"*10)
+                    line = "; ".join([f"{i} ({round(p, 3)})" for i, p in zip(gated_token, gated_token_weight)])
+                    print(line)
+                    input()

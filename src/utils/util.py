@@ -176,23 +176,24 @@ class BM25(object):
         self.doc_avg_length = doc_length / doc_count
 
 
-    def __call__(self, documents):
+    def __call__(self, document):
         self.logger.info("computing BM25 scores...")
-        if not hasattr(self, "idf"):
-            self.fit(documents)
-        sorted_documents = []
-        for tf, document in zip(self.tfs, documents):
-            score_pairs = []
-            for word, freq in tf.items():
-                # skip word such as punctuations
-                if len(word) == 1:
-                    continue
-                score = (self.idf[word] * freq * (self.k + 1)) / (freq + self.k * (1 - self.b + self.b * len(document) / self.doc_avg_length))
-                score_pairs.append((word, score))
-            score_pairs = sorted(score_pairs, key=lambda x: x[1], reverse=True)
-            sorted_document = " ".join([x[0] for x in score_pairs])
-            sorted_documents.append(sorted_document)
-        return sorted_documents
+
+        tf = defaultdict(int)
+        words = tokenize(document)
+        for word in words:
+            tf[word] += 1
+
+        score_pairs = []
+        for word, freq in tf.items():
+            # skip word such as punctuations
+            if len(word) == 1:
+                continue
+            score = (self.idf[word] * freq * (self.k + 1)) / (freq + self.k * (1 - self.b + self.b * len(document) / self.doc_avg_length))
+        score_pairs.append((word, score))
+        score_pairs = sorted(score_pairs, key=lambda x: x[1], reverse=True)
+        sorted_document = " ".join([x[0] for x in score_pairs])
+        return sorted_document
 
 
 
