@@ -1,18 +1,18 @@
 import os
 import logging
-import subprocess
+import linecache
 import numpy as np
 import torch.distributed as dist
 from tqdm import tqdm
 from itertools import cycle
 from multiprocessing import Pool
 from transformers import AutoTokenizer
-from torch.utils.data import IterableDataset
+from torch.utils.data import Dataset
 
 logger = logging.getLogger("Dataset")
 
 
-class DBLP(IterableDataset):
+class DBLP(Dataset):
     def __init__(self, manager):
         """
         iterably load the triples, tokenize and return
@@ -44,62 +44,65 @@ class DBLP(IterableDataset):
             raise NotImplementedError
 
 
-    def _parse_triple_file(self):
-        with open(self.file_path, "r") as f:
-            for line in f:
-                query_and_neighbors, key_and_neighbors = line.strip('\n').split('\t')[:2]
-                query_and_neighbors = query_and_neighbors.split('|\'|')[:self.neighbor_num]
-                key_and_neighbors = key_and_neighbors.split('|\'|')[:self.neighbor_num]
+    def _parse_line(self, line):
+        query_and_neighbors, key_and_neighbors = line.strip('\n').split('\t')[:2]
+        query_and_neighbors = query_and_neighbors.split('|\'|')[:self.neighbor_num]
+        key_and_neighbors = key_and_neighbors.split('|\'|')[:self.neighbor_num]
 
-                query_neighbor_mask = np.zeros(self.neighbor_num, dtype=np.int64)
-                query_neighbor_mask[:len(query_and_neighbors)] = 1
-                if len(query_and_neighbors) < self.neighbor_num:
-                    query_and_neighbors += [""] * (self.neighbor_num - len(query_and_neighbors))
+        query_neighbor_mask = np.zeros(self.neighbor_num, dtype=np.int64)
+        query_neighbor_mask[:len(query_and_neighbors)] = 1
+        if len(query_and_neighbors) < self.neighbor_num:
+            query_and_neighbors += [""] * (self.neighbor_num - len(query_and_neighbors))
 
-                key_neighbor_mask = np.zeros(self.neighbor_num, dtype=np.int64)
-                key_neighbor_mask[:len(key_and_neighbors)] = 1
-                if len(key_and_neighbors) < self.neighbor_num:
-                    key_and_neighbors += [""] * (self.neighbor_num - len(key_and_neighbors))
+        key_neighbor_mask = np.zeros(self.neighbor_num, dtype=np.int64)
+        key_neighbor_mask[:len(key_and_neighbors)] = 1
+        if len(key_and_neighbors) < self.neighbor_num:
+            key_and_neighbors += [""] * (self.neighbor_num - len(key_and_neighbors))
 
-                query_outputs = self.tokenizer(query_and_neighbors, return_tensors="np", padding="max_length", max_length=self.sequence_length, truncation=True)
-                query_token_id = query_outputs["input_ids"].astype(np.int64)
-                query_attn_mask = query_outputs["attention_mask"].astype(np.int64)
+        query_outputs = self.tokenizer(query_and_neighbors, return_tensors="np", padding="max_length", max_length=self.sequence_length, truncation=True)
+        query_token_id = query_outputs["input_ids"].astype(np.int64)
+        query_attn_mask = query_outputs["attention_mask"].astype(np.int64)
 
-                key_output = self.tokenizer(key_and_neighbors, return_tensors="np", padding="max_length", max_length=self.sequence_length, truncation=True)
-                key_token_id = key_output["input_ids"].astype(np.int64)
-                key_attn_mask = key_output["attention_mask"].astype(np.int64)
+        key_output = self.tokenizer(key_and_neighbors, return_tensors="np", padding="max_length", max_length=self.sequence_length, truncation=True)
+        key_token_id = key_output["input_ids"].astype(np.int64)
+        key_attn_mask = key_output["attention_mask"].astype(np.int64)
 
-                # default to int64 so that it can be directly converted to long tensor
-                return_dict = {
-                    "query_token_id": query_token_id,
-                    "key_token_id": key_token_id,
-                    "query_attn_mask": query_attn_mask,
-                    "key_attn_mask": key_attn_mask,
-                    "query_neighbor_mask": query_neighbor_mask,
-                    "key_neighbor_mask": key_neighbor_mask
-                }
+        # default to int64 so that it can be directly converted to long tensor
+        return_dict = {
+            "query_token_id": query_token_id,
+            "key_token_id": key_token_id,
+            "query_attn_mask": query_attn_mask,
+            "key_attn_mask": key_attn_mask,
+            "query_neighbor_mask": query_neighbor_mask,
+            "key_neighbor_mask": key_neighbor_mask
+        }
 
-                if self.enable_gate == "weight":
-                    query_gate_mask = np.zeros(query_attn_mask.shape, dtype=np.int64)
-                    token_set = set()
-                    for i, token_id in enumerate(query_token_id):
-                        for j, token in enumerate(token_id):
-                            if token not in token_set and token not in self.special_token_ids:
-                                query_gate_mask[i, j] = 1
-                                token_set.add(token)
+        if self.enable_gate == "weight":
+            query_gate_mask = np.zeros(query_attn_mask.shape, dtype=np.int64)
+            token_set = set()
+            for i, token_id in enumerate(query_token_id):
+                for j, token in enumerate(token_id):
+                    if token not in token_set and token not in self.special_token_ids:
+                        query_gate_mask[i, j] = 1
+                        token_set.add(token)
 
-                    key_gate_mask = np.zeros(key_attn_mask.shape, dtype=np.int64)
-                    token_set = set()
-                    for i, token_id in enumerate(key_token_id):
-                        for j, token in enumerate(token_id):
-                            if token not in token_set and token not in self.special_token_ids:
-                                key_gate_mask[i, j] = 1
-                                token_set.add(token)
+            key_gate_mask = np.zeros(key_attn_mask.shape, dtype=np.int64)
+            token_set = set()
+            for i, token_id in enumerate(key_token_id):
+                for j, token in enumerate(token_id):
+                    if token not in token_set and token not in self.special_token_ids:
+                        key_gate_mask[i, j] = 1
+                        token_set.add(token)
 
-                    return_dict["query_gate_mask"] = query_gate_mask
-                    return_dict["key_gate_mask"] = key_gate_mask
+            return_dict["query_gate_mask"] = query_gate_mask
+            return_dict["key_gate_mask"] = key_gate_mask
 
-                yield return_dict
+        return return_dict
+
+
+    def __getitem__(self, index):
+        line = linecache.getline(self.file_path, index + 1)
+        return self._parse_line(line)
 
 
 
@@ -109,10 +112,6 @@ class DBLP_Train(DBLP):
         super().__init__(manager)
 
 
-    def __iter__(self):
-        return self._parse_triple_file()
-
-
 
 class DBLP_Dev(DBLP):
     def __init__(self, manager):
@@ -120,16 +119,8 @@ class DBLP_Dev(DBLP):
         super().__init__(manager)
 
 
-    def __iter__(self):
-        return self._parse_triple_file()
-
-
 
 class DBLP_Test(DBLP):
     def __init__(self, manager):
         self.file_path = os.path.join(manager.data_root, "DBLP", "test", manager.file_name)
         super().__init__(manager)
-
-
-    def __iter__(self):
-        return self._parse_triple_file()

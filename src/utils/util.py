@@ -253,6 +253,23 @@ def default_collate(batch):
 
 
 
+class Sequential_Sampler:
+    def __init__(self, dataset_length, num_replicas, rank) -> None:
+        super().__init__()
+        len_per_worker = dataset_length / num_replicas
+        self.start = round(len_per_worker * rank)
+        self.end = round(len_per_worker * (rank + 1))
+
+    def __iter__(self):
+        start = self.start
+        end = self.end
+        return iter(range(start, end, 1))
+
+    def __len__(self):
+        return self.end - self.start
+
+
+
 @dataclass
 class IterableMultiProcessDataloader:
     dataset: torch.utils.data.IterableDataset

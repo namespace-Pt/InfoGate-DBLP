@@ -35,7 +35,11 @@ def main(rank, manager):
         # if isinstance(model, DDP):
         #     model.module.dev(manager, loaders, load=True, log=True)
         # else:
-            model.dev(manager, loaders, load=True, log=True)
+        model.dev(manager, loaders, load=True, log=True)
+
+    elif manager.mode == "test":
+        model.test(manager, loaders, load=True, log=True)
+
 
 
 if __name__ == "__main__":

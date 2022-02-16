@@ -14,7 +14,7 @@ from datetime import timedelta
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
-from utils.util import download_plm, IterableDataloader, IterableMultiProcessDataloader
+from utils.util import download_plm, Sequential_Sampler, IterableDataloader, IterableMultiProcessDataloader
 from utils.dataset import *
 
 logger = logging.getLogger("Manager")
@@ -68,7 +68,7 @@ class Manager():
         parser.add_argument("-ged", "--gate-embedding-dim", dest="gate_embedding_dim", type=int, default=300)
         parser.add_argument("-ghd", "--gate-hidden-dim", dest="gate_hidden_dim", type=int, default=300)
 
-        parser.add_argument("-k", dest="k", help="gate number", type=int, default=4)
+        parser.add_argument("-k", dest="k", help="gate number", type=int, default=8)
 
         parser.add_argument("-plm", dest="plm", help="short name of pre-trained language models", type=str, default="bert")
 
@@ -225,19 +225,23 @@ class Manager():
         if "train" in self.dataloaders:
             dataset_train = DBLP_Train(self)
             if self.distributed:
-                global_end = mp.Manager().Value('b', False)
-                loaders["train"] = IterableMultiProcessDataloader(dataset_train, batch_size=self.batch_size, local_rank=self.rank, world_size=self.world_size, global_end=global_end)
+                sampler_train = DistributedSampler(dataset_train, num_replicas=self.world_size, rank=self.rank, seed=self.seed)
+                shuffle = False
             else:
-                loaders["train"] = IterableDataloader(dataset_train, batch_size=self.batch_size)
+                sampler_train = None
+                shuffle = True
+            loaders["train"] = DataLoader(dataset_train, batch_size=self.batch_size, shuffle=shuffle, sampler=sampler_train)
 
         if "dev" in self.dataloaders:
             dataset_dev = DBLP_Dev(self)
-            loaders["dev"] = IterableDataloader(dataset_dev, batch_size=self.batch_size_eval)
+            # sampler_dev = Sequential_Sampler(len(dataset_dev), num_replicas=self.world_size, rank=self.rank)
+            loaders["dev"] = DataLoader(dataset_dev, batch_size=self.batch_size_eval, drop_last=False)
+
 
         if "test" in self.dataloaders:
             dataset_test = DBLP_Test(self)
-            loaders["test"] = IterableDataloader(dataset_test, batch_size=self.batch_size_eval)
-
+            # sampler_test = Sequential_Sampler(len(dataset_test), num_replicas=self.world_size, rank=self.rank)
+            loaders["test"] = DataLoader(dataset_test, batch_size=self.batch_size_eval, drop_last=False)
         return loaders
 
 
