@@ -65,7 +65,7 @@ class BaseModel(nn.Module):
         return torch.cat(all_tensors, dim=0)
 
 
-    def _dev(self, manager, loader):
+    def _eval(self, manager, loader):
         metrics = defaultdict(list)
         for i, x in enumerate(tqdm(loader, desc="Evaluating", ncols=80)):
             score = self.infer(x)
@@ -97,7 +97,28 @@ class BaseModel(nn.Module):
             manager.load(self)
 
         if self.rank in [0, -1]:
-            metrics = self._dev(manager, loaders["dev"])
+            metrics = self._eval(manager, loaders["dev"])
+            metrics["main"] = metrics["acc"]
+            self.logger.info(metrics)
+            if log:
+                manager._log(self.name, metrics)
+        else:
+            metrics = None
+
+        if manager.distributed:
+            dist.barrier(device_ids=[self.device])
+
+        return metrics
+
+
+    @torch.no_grad()
+    def test(self, manager, loaders, load=True, log=False):
+        self.eval()
+        if load:
+            manager.load(self)
+
+        if self.rank in [0, -1]:
+            metrics = self._eval(manager, loaders["test"])
             metrics["main"] = metrics["acc"]
             self.logger.info(metrics)
             if log:
