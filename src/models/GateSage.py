@@ -17,6 +17,11 @@ class GateSage(BaseModel):
         self.graph_transform = nn.Linear(manager.plm_dim * 2, manager.plm_dim, bias=False)
         self.pooling_transform = nn.Linear(manager.plm_dim, manager.plm_dim)
 
+        self.k = manager.k
+        keep_k_modifier = torch.zeros(manager.sequence_length)
+        keep_k_modifier[1:self.k + 1] = 1
+        self.register_buffer('keep_k_modifier', keep_k_modifier, persistent=False)
+
 
     def _compute_gate(self, token_id, attn_mask, gate_mask, token_weight):
         """ gating by the weight of each token
@@ -46,7 +51,6 @@ class GateSage(BaseModel):
                 gated_token_id = token_id[:, :, 1: self.k + 1]
                 gated_attn_mask = attn_mask[:, :, 1: self.k + 1]
             gated_token_weight = None
-
         return gated_token_id, gated_attn_mask, gated_token_weight
 
 
@@ -56,7 +60,7 @@ class GateSage(BaseModel):
         embedding = self.encoder(gated_token_id, gated_attn_mask, gated_token_weight)
         node_embedding = self.graphsage(embedding, neighbor_mask)
         return node_embedding
-        
+
 
     def aggregation(self, neighbor_embed, neighbor_mask):
         neighbor_embed = F.relu(self.pooling_transform(neighbor_embed))

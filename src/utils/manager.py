@@ -65,6 +65,7 @@ class Manager():
         parser.add_argument("-eg", "--enable-gate", dest="enable_gate", help="way to gate tokens", type=str, choices=["weight", "none", "bm25", "first", "keybert", "random"], default="weight")
         parser.add_argument("-wt", "--weighter", dest="weighter", default="cnn")
 
+        parser.add_argument("-ged", "--gate-embedding-dim", dest="gate_embedding_dim", type=int, default=300)
         parser.add_argument("-ghd", "--gate-hidden-dim", dest="gate_hidden_dim", type=int, default=300)
 
         parser.add_argument("-k", dest="k", help="gate number", type=int, default=4)
@@ -346,14 +347,15 @@ class Manager():
 
         for epoch in range(self.epochs):
             epoch_loss = 0
-            dataset_train = DBLP_Train(self)
-            if self.distributed:
-                global_end = mp.Manager().Value('b', False)
-                loader_train = IterableMultiProcessDataloader(dataset_train, batch_size=self.batch_size, local_rank=self.rank, world_size=self.world_size, global_end=global_end)
-            else:
-                loader_train = IterableDataloader(dataset_train, batch_size=self.batch_size)
-            tqdm_ = tqdm(loader_train, ncols=120)
 
+            loader_train = loaders["train"]
+            # dataset_train = DBLP_Train(self)
+            # if self.distributed:
+            #     global_end = mp.Manager().Value('b', False)
+            #     loader_train = IterableMultiProcessDataloader(dataset_train, batch_size=self.batch_size, local_rank=self.rank, world_size=self.world_size, global_end=global_end)
+            # else:
+            #     loader_train = IterableDataloader(dataset_train, batch_size=self.batch_size)
+            tqdm_ = tqdm(loader_train, ncols=120)
             for step, x in enumerate(tqdm_, 1):
                 optimizer.zero_grad(set_to_none=True)
                 loss = model(x)

@@ -39,7 +39,11 @@ def main(rank, manager):
 
 
 if __name__ == "__main__":
-    manager = Manager()
+    config = {
+        "validate_step": "0.5e",
+    }
+    manager = Manager(config)
+
 
     if manager.world_size > 1:
         mp.spawn(
