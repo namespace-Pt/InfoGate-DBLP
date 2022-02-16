@@ -152,10 +152,10 @@ class BM25(object):
         """
         build term frequencies (how many times a term occurs in one news) and document frequencies (how many documents contains a term)
         """
+        self.logger.info("Fitting BM25...")
         doc_length = 0
         doc_count = len(documents)
 
-        tfs = []
         df = defaultdict(int)
         for document in documents:
             tf = defaultdict(int)
@@ -163,10 +163,7 @@ class BM25(object):
             for word in words:
                 tf[word] += 1
                 df[word] += 1
-            tfs.append(tf)
             doc_length += len(words)
-
-        self.tfs = tfs
 
         idf = defaultdict(float)
         for word, freq in df.items():
@@ -190,7 +187,7 @@ class BM25(object):
             if len(word) == 1:
                 continue
             score = (self.idf[word] * freq * (self.k + 1)) / (freq + self.k * (1 - self.b + self.b * len(document) / self.doc_avg_length))
-        score_pairs.append((word, score))
+            score_pairs.append((word, score))
         score_pairs = sorted(score_pairs, key=lambda x: x[1], reverse=True)
         sorted_document = " ".join([x[0] for x in score_pairs])
         return sorted_document
