@@ -79,20 +79,30 @@ class DBLP(Dataset):
 
         if self.enable_gate == "weight":
             query_gate_mask = np.zeros(query_attn_mask.shape, dtype=np.int64)
-            token_set = set()
+            # token_set = set()
+            # for i, token_id in enumerate(query_token_id):
+            #     for j, token in enumerate(token_id):
+            #         if token not in token_set and token not in self.special_token_ids:
+            #             query_gate_mask[i, j] = 1
+            #             token_set.add(token)
+            # token_set = set()
             for i, token_id in enumerate(query_token_id):
                 for j, token in enumerate(token_id):
-                    if token not in token_set and token not in self.special_token_ids:
+                    if token not in self.special_token_ids:
                         query_gate_mask[i, j] = 1
-                        token_set.add(token)
 
             key_gate_mask = np.zeros(key_attn_mask.shape, dtype=np.int64)
+            # token_set = set()
+            # for i, token_id in enumerate(key_token_id):
+            #     for j, token in enumerate(token_id):
+            #         if token not in token_set and token not in self.special_token_ids:
+            #             key_gate_mask[i, j] = 1
+            #             token_set.add(token)
             token_set = set()
             for i, token_id in enumerate(key_token_id):
                 for j, token in enumerate(token_id):
-                    if token not in token_set and token not in self.special_token_ids:
+                    if token not in self.special_token_ids:
                         key_gate_mask[i, j] = 1
-                        token_set.add(token)
 
             return_dict["query_gate_mask"] = query_gate_mask
             return_dict["key_gate_mask"] = key_gate_mask
