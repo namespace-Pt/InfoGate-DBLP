@@ -51,7 +51,7 @@ elif args.enable_gate == "keybert":
 
     for text_dir in text_dir_all:
         text_path = os.path.join(args.data_root, "DBLP", text_dir, "base.tsv")
-        if not os.path.exists(text_path):
+        if not os.path.exists(text_path) or "train" in text_path:
             continue
 
         texts = []

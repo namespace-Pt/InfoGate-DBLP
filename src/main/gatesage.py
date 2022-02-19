@@ -49,6 +49,7 @@ def main(rank, manager):
 if __name__ == "__main__":
     config = {
         "validate_step": "0.5e",
+        "hold_step": "4e",
         "enable_gate": "weight"
     }
     manager = Manager(config)
