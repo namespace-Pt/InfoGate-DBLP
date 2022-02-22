@@ -10,4 +10,18 @@
 |GateSage|Random|32|8|800|1e-5|||||
 |GateSage|KeyBert|32|8|800|1e-5|||||
 
+|k|gate|batch size|ACC|MRR|nDCG|
+|:-:|:-:|:-:|:-:|:-:|
+|1|First|||
+|1|Cnn|||
+|2|First|||
+|2|Cnn|
+|4|First|0.5491|0.6691|0.7423|
+|4|Cnn|0.6569|0.7579|0.8128|
+|6|First|
+|6|Cnn|||
+|8|First||||
+|8|Cnn|||
+
+
 - draw each metric line

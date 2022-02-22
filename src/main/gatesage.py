@@ -44,6 +44,8 @@ def main(rank, manager):
         manager.load(model)
         model.inspect(manager, loaders)
 
+    elif manager.mode == "encode":
+        model.encode(manager, loaders)
 
 
 if __name__ == "__main__":

@@ -153,7 +153,8 @@ class Manager():
             "train": ["train", "dev"],
             "dev": ["dev"],
             "test": ["test"],
-            "inspect": ["dev"]
+            "inspect": ["dev"],
+            "encode": ["dev"]
         }
 
         self.plm_dir = os.path.join(self.data_root, "PLM", self.plm)

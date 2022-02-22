@@ -24,7 +24,7 @@ class BaseModel(nn.Module):
 
         self.enable_gate = manager.enable_gate
         self.k = manager.k
-        
+
         self.neighbor_num = manager.neighbor_num
 
         if name is None:
@@ -186,3 +186,10 @@ class BaseModel(nn.Module):
                     line = "; ".join([f"{i} ({round(p, 3)})" for i, p in zip(gated_token, gated_token_weight)])
                     print(line)
                     input()
+
+
+    @torch.no_grad()
+    def encode(self ,manager, loaders):
+        """used for testing speed"""
+        for i, x in enumerate(tqdm(loaders["dev"], desc="Evaluating", ncols=80)):
+            self.infer(x)
