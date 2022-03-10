@@ -26,8 +26,8 @@ class GatedBertEncoder(nn.Module):
         token_embedding = self.embeddings(token_id)
 
         if token_weight is not None:
-            token_weight = token_weight.view(-1, original_shape[-1])
-            token_embedding = token_embedding * token_weight.unsqueeze(-1)
+            token_weight = token_weight.view(-1, original_shape[-1]).unsqueeze(-1)
+            token_embedding = token_embedding * (token_weight + (1 - token_weight.detach()))
 
         extended_attn_mask = extend_attention_mask(attn_mask)
         token_embedding = self.plm(token_embedding, attention_mask=extended_attn_mask).last_hidden_state

@@ -58,6 +58,7 @@ elif args.enable_gate == "keybert":
         with open(text_path) as f:
             new_text_path = os.path.join(os.path.split(text_path)[0], "keybert.tsv")
             g = open(new_text_path, "w")
+            print(text_path)
             for line in tqdm(f, total=int(subprocess.check_output(["wc", "-l", text_path]).decode("utf-8").split()[0])):
                 query_and_neighbors, key_and_neighbors = line.strip('\n').split('\t')[:2]
                 query_and_neighbors = query_and_neighbors.split('|\'|')[:5]
